@@ -24,13 +24,13 @@ const WEB_PORT    = 3000;
 
 // 🔥 Firebase config — lấy từ Firebase Console
 const firebaseConfig = {
-  apiKey:            "FIREBASE_API_KEY",
-  authDomain:        "FIREBASE_AUTH_DOMAIN",
-  databaseURL:       "FIREBASE_DATABASE_URL",
-  projectId:         "FIREBASE_PROJECT_ID",
-  storageBucket:     "FIREBASE_STORAGE_BUCKET",
-  messagingSenderId: "FIREBASE_MESSAGING_SENDER_ID",
-  appId:             "FIREBASE_APP_ID"
+  apiKey:            "AIzaSyBoVEofW3IdbppeDdP9ksiIoA_zac0zS5U",
+  authDomain:        "hunganh-doam1.firebaseapp.com",
+  databaseURL:       "https://hunganh-doam1-default-rtdb.firebaseio.com",
+  projectId:         "hunganh-doam1",
+  storageBucket:     "hunganh-doam1.firebasestorage.app",
+  messagingSenderId: "430690199452",
+  appId:             "1:430690199452:web:14018e3458ba9fea788a59"
 };
 // =====================================================
 
