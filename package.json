@@ -1,0 +1,15 @@
+{
+  "name": "arduino-dashboard-server",
+  "version": "1.0.0",
+  "description": "Local web dashboard for Arduino DHT11 + Relay control",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "firebase": "^10.7.0",
+    "serialport": "^12.0.0",
+    "ws": "^8.14.2"
+  }
+}

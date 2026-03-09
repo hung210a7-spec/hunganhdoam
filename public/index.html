@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arduino Smart Dashboard — Public</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0e1a; --card:#111827; --border:#1e2d45; --text:#e2e8f0;
+    --muted:#64748b; --blue:#3b82f6; --cyan:#06b6d4; --green:#10b981;
+    --orange:#f59e0b; --red:#ef4444; --purple:#8b5cf6;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  header{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;justify-content:space-between;}
+  .logo h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .logo p{font-size:12px;color:var(--muted);margin-top:2px;}
+  #conn-dot{width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;animation:pulse 2s infinite;margin-right:6px;}
+  #conn-dot.ok{background:var(--green);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  main{max-width:1100px;margin:0 auto;padding:32px 24px;}
+  .sensor-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+  .sensor-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;position:relative;overflow:hidden;}
+  .sensor-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+  .sensor-card.temp::before{background:linear-gradient(90deg,#f59e0b,#ef4444);}
+  .sensor-card.hum::before{background:linear-gradient(90deg,#06b6d4,#3b82f6);}
+  .sensor-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+  .sensor-value{font-size:52px;font-weight:800;line-height:1;}
+  .sensor-card.temp .sensor-value{background:linear-gradient(135deg,#fbbf24,#f87171);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .sensor-card.hum .sensor-value{background:linear-gradient(135deg,#22d3ee,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .sensor-unit{font-size:20px;font-weight:500;color:var(--muted);margin-left:4px;}
+  .sensor-icon{position:absolute;top:24px;right:24px;font-size:36px;opacity:.3;}
+  .devices-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+  .device-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;transition:border-color .3s;}
+  .device-card.active{border-color:rgba(59,130,246,.4);}
+  .device-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .device-name{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;}
+  .status-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(100,116,139,.2);color:var(--muted);transition:all .3s;}
+  .status-badge.on{background:rgba(16,185,129,.15);color:#34d399;}
+  .device-status-text{font-size:13px;color:var(--muted);margin-bottom:20px;min-height:18px;}
+  .device-buttons{display:flex;gap:10px;}
+  .btn{flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif;}
+  .btn-on{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3);}
+  .btn-off{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2);}
+  .btn-auto{background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);}
+  .btn-on:hover{background:rgba(16,185,129,.3);transform:translateY(-1px);}
+  .btn-off:hover{background:rgba(239,68,68,.2);transform:translateY(-1px);}
+  .btn-auto:hover{background:rgba(139,92,246,.3);transform:translateY(-1px);}
+  .mode-bar{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;}
+  .log-section{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .log-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .log-header h2{font-size:15px;font-weight:600;}
+  .log-count{background:var(--blue);color:white;font-size:11px;padding:2px 8px;border-radius:10px;}
+  #log-list{max-height:380px;overflow-y:auto;}
+  .log-item{display:flex;align-items:flex-start;gap:14px;padding:16px 24px;border-bottom:1px solid var(--border);animation:slideIn .3s ease;}
+  @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  .log-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+  .log-dot.fan{background:var(--orange);}
+  .log-dot.pump{background:var(--cyan);}
+  .log-message{font-size:14px;margin-bottom:4px;}
+  .log-time{font-size:12px;color:var(--muted);}
+  .log-empty{padding:48px;text-align:center;color:var(--muted);font-size:14px;}
+  #updated-at{font-size:11px;color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <h1>🌿 Smart Control Dashboard</h1>
+    <p>Arduino Mega + DHT11 — Realtime via Firebase</p>
+  </div>
+  <div style="text-align:right">
+    <div><span id="conn-dot"></span><span id="conn-text">Đang kết nối...</span></div>
+    <div id="updated-at"></div>
+  </div>
+</header>
+
+<main>
+  <div class="sensor-row">
+    <div class="sensor-card temp">
+      <div class="sensor-icon">🌡️</div>
+      <div class="sensor-label">Nhiệt độ</div>
+      <div class="sensor-value"><span id="temp-val">--</span><span class="sensor-unit">°C</span></div>
+    </div>
+    <div class="sensor-card hum">
+      <div class="sensor-icon">💧</div>
+      <div class="sensor-label">Độ ẩm</div>
+      <div class="sensor-value"><span id="hum-val">--</span><span class="sensor-unit">%</span></div>
+    </div>
+  </div>
+
+  <div class="devices-row">
+    <div class="device-card" id="fan-card">
+      <div class="device-header">
+        <div class="device-name"><span>🌀</span><span>Quạt làm mát</span></div>
+        <span class="status-badge" id="fan-badge">TẮT</span>
+      </div>
+      <div class="device-status-text" id="fan-status">Nhiệt độ lý tưởng</div>
+      <div class="device-buttons">
+        <button class="btn btn-on"  onclick="sendCmd('FAN:ON')">▶ Bật quạt</button>
+        <button class="btn btn-off" onclick="sendCmd('FAN:OFF')">■ Tắt quạt</button>
+      </div>
+    </div>
+    <div class="device-card" id="pump-card">
+      <div class="device-header">
+        <div class="device-name"><span>💦</span><span>Máy bơm</span></div>
+        <span class="status-badge" id="pump-badge">TẮT</span>
+      </div>
+      <div class="device-status-text" id="pump-status">Độ ẩm lý tưởng</div>
+      <div class="device-buttons">
+        <button class="btn btn-on"  onclick="sendCmd('PUMP:ON')">▶ Bật bơm</button>
+        <button class="btn btn-off" onclick="sendCmd('PUMP:OFF')">■ Tắt bơm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mode-bar">
+    <div style="font-size:13px;color:var(--muted)">Chế độ: <span id="mode-text" style="font-weight:600;color:#a78bfa">🤖 TỰ ĐỘNG</span></div>
+    <button class="btn btn-auto" style="flex:0;padding:8px 20px" onclick="sendCmd('AUTO')">🔄 Về TỰ ĐỘNG</button>
+  </div>
+
+  <div class="log-section">
+    <div class="log-header">
+      <h2>📋 Nhật ký hoạt động</h2>
+      <span class="log-count" id="log-count">0</span>
+    </div>
+    <div id="log-list"><div class="log-empty">Đang tải dữ liệu từ Firebase...</div></div>
+  </div>
+</main>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp }  from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+  import { getDatabase, ref, onValue, push, set } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+
+  // 🔥 Firebase config — ĐIỀN VÀO ĐÂY
+  const firebaseConfig = {
+    apiKey:            "FIREBASE_API_KEY",
+    authDomain:        "FIREBASE_AUTH_DOMAIN",
+    databaseURL:       "FIREBASE_DATABASE_URL",
+    projectId:         "FIREBASE_PROJECT_ID",
+    storageBucket:     "FIREBASE_STORAGE_BUCKET",
+    messagingSenderId: "FIREBASE_MESSAGING_SENDER_ID",
+    appId:             "FIREBASE_APP_ID"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const db    = getDatabase(fbApp);
+
+  // Realtime sensor data
+  onValue(ref(db, 'sensor'), (snap) => {
+    const d = snap.val();
+    if (!d) return;
+    document.getElementById('conn-dot').classList.add('ok');
+    document.getElementById('conn-text').textContent = 'Đã kết nối';
+    document.getElementById('temp-val').textContent = d.t ?? '--';
+    document.getElementById('hum-val').textContent  = d.h ?? '--';
+    setDevice('fan',  d.fan,  d.fan  ? '🌡️ Đang hạ nhiệt' : '✅ Nhiệt độ lý tưởng');
+    setDevice('pump', d.pump, d.pump ? '💧 Đang cải thiện độ ẩm' : '✅ Độ ẩm lý tưởng');
+    if (d.updatedAt) {
+      const t = new Date(d.updatedAt);
+      document.getElementById('updated-at').textContent = 'Cập nhật: ' + t.toLocaleTimeString('vi-VN');
+    }
+  });
+
+  // Realtime event log
+  onValue(ref(db, 'events'), (snap) => {
+    const data = snap.val();
+    if (!data) return;
+    const events = Object.values(data).sort((a,b) => b.ts - a.ts).slice(0, 50);
+    renderLog(events);
+  });
+
+  function setDevice(id, isOn, statusText) {
+    document.getElementById(`${id}-card`).classList.toggle('active', isOn);
+    const badge = document.getElementById(`${id}-badge`);
+    badge.textContent = isOn ? 'BẬT' : 'TẮT';
+    badge.classList.toggle('on', isOn);
+    document.getElementById(`${id}-status`).textContent = statusText;
+  }
+
+  function renderLog(events) {
+    const list = document.getElementById('log-list');
+    list.innerHTML = '';
+    events.forEach(ev => list.appendChild(makeLogItem(ev)));
+    document.getElementById('log-count').textContent = events.length;
+  }
+
+  function makeLogItem(ev) {
+    const div = document.createElement('div');
+    div.className = 'log-item';
+    div.innerHTML = `
+      <div class="log-dot ${ev.type}"></div>
+      <div>
+        <div class="log-message">${ev.message}</div>
+        <div class="log-time">${ev.date} lúc ${ev.time}</div>
+      </div>`;
+    return div;
+  }
+
+  // Gửi lệnh lên Firebase → Local server đọc và gửi vào Arduino
+  window.sendCmd = function(cmd) {
+    set(ref(db, 'control'), { cmd, ts: Date.now() });
+    if (cmd !== 'AUTO') {
+      document.getElementById('mode-text').textContent = '✋ THỦ CÔNG';
+      document.getElementById('mode-text').style.color = '#f59e0b';
+    } else {
+      document.getElementById('mode-text').textContent = '🤖 TỰ ĐỘNG';
+      document.getElementById('mode-text').style.color = '#a78bfa';
+    }
+  };
+</script>
+</body>
+</html>
