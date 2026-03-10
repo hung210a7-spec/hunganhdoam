@@ -103,6 +103,24 @@ function pushSensorData(data) {
 
 let port, parser, prevFan = null, prevPump = null;
 let reconnecting = false;
+// Lưu trạng thái tay cuối cùng để khôi phục sau khi Arduino reset
+let manualFan  = null; // null = không override, true/false = đang override tay
+let manualPump = null;
+
+function restoreStates() {
+  if (!port || !port.isOpen) return;
+  if (manualFan  !== null) {
+    const cmd = manualFan  ? 'FAN:ON\n'  : 'FAN:OFF\n';
+    port.write(cmd);
+    console.log('🔁 Khôi phục quạt:', manualFan ? 'BẬT' : 'TẮT');
+  }
+  if (manualPump !== null) {
+    const cmd = manualPump ? 'PUMP:ON\n' : 'PUMP:OFF\n';
+    port.write(cmd);
+    console.log('🔁 Khôi phục bơm:', manualPump ? 'BẬT' : 'TẮT');
+  }
+}
+
 
 function scheduleReconnect() {
   if (reconnecting) return;
@@ -120,7 +138,11 @@ async function connectSerial() {
   try {
     port = new SerialPort({ path: detectedPort, baudRate: BAUD_RATE });
     parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-    port.on('open', () => console.log(`✅ Serial: ${detectedPort} — Đã kết nối!`));
+    port.on('open', () => {
+      console.log(`✅ Serial: ${detectedPort} — Đã kết nối!`);
+      // Sau 2 giây Arduino khởi động xong → gửi lại trạng thái
+      setTimeout(() => restoreStates(), 2000);
+    });
 
 
     parser.on('data', (line) => {
@@ -175,9 +197,11 @@ app.post('/api/control', (req, res) => {
   port.write(cmd, (err) => {
     if (err) return res.json({ ok: false, msg: err.message });
     const isOn = action.toUpperCase() === 'ON';
+    // Lưu trạng thái manual để khôi phục sau reset
+    if (device.toUpperCase() === 'FAN')  manualFan  = isOn;
+    if (device.toUpperCase() === 'PUMP') manualPump = isOn;
     const value = device === 'FAN' ? lastData.t : lastData.h;
     const event = addEvent(device.toLowerCase(), isOn, value);
-    // Lưu lệnh lên Firebase để dashboard public cũng gửi được
     set(ref(db, 'control'), { cmd, ts: Date.now() }).catch(console.error);
     broadcast({ type: 'control', event });
     res.json({ ok: true });
@@ -197,6 +221,11 @@ onValue(ref(db, 'control'), (snapshot) => {
   if (Date.now() - data.ts > 15000) return; // Bỏ qua lệnh cũ hơn 15 giây
 
   lastCmdId = cmdId;
+  const device = data.cmd.split(':')[0];
+  const action = (data.cmd.split(':')[1] || '').replace(/\n/g,'').trim();
+  if (device === 'FAN')  manualFan  = action === 'ON';
+  if (device === 'PUMP') manualPump = action === 'ON';
+  if (data.cmd === 'AUTO') { manualFan = null; manualPump = null; }
   const cmdStr = data.cmd + (data.cmd.includes('\n') ? '' : '\n');
   port.write(cmdStr, (err) => {
     if (err) console.error('Ghi Serial lỗi:', err.message);
