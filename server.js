@@ -20,13 +20,18 @@ const path = require('path');
 // =====================================================
 const BAUD_RATE   = 9600;
 const WEB_PORT    = 3000;
-const FALLBACK_PORT = 'COM7'; // Dự phòng nếu không tự tìm được
+// Danh sách cổng ưu tiên thử nếu không tìm thấy theo manufacturer
+const PRIORITY_PORTS = ['COM4', 'COM7', 'COM3', 'COM5', 'COM6', 'COM8'];
+// COM không phải Arduino (bỏ qua)
+const IGNORE_MANUFACTURER = ['intel', 'microsoft', 'bluetooth'];
 
-// Tự động tìm cổng COM của Arduino (CH340 chip = wch.cn)
+// Tự động tìm cổng COM của Arduino
 async function findArduinoPort() {
   const { SerialPort } = require('serialport');
   const ports = await SerialPort.list();
-  const arduino = ports.find(p =>
+
+  // Bước 1: Tìm theo manufacturer Arduino/CH340
+  const byManufacturer = ports.find(p =>
     p.manufacturer && (
       p.manufacturer.toLowerCase().includes('wch') ||
       p.manufacturer.toLowerCase().includes('arduino') ||
@@ -34,13 +39,27 @@ async function findArduinoPort() {
       p.manufacturer.toLowerCase().includes('ch341')
     )
   );
-  if (arduino) {
-    console.log(`🔍 Tìm thấy Arduino tại: ${arduino.path} (${arduino.manufacturer})`);
-    return arduino.path;
+  if (byManufacturer) {
+    console.log(`🔍 Tìm thấy Arduino tại: ${byManufacturer.path} (${byManufacturer.manufacturer})`);
+    return byManufacturer.path;
   }
-  console.warn(`⚠️ Không tự tìm thấy Arduino, dùng cổng mặc định: ${FALLBACK_PORT}`);
-  return FALLBACK_PORT;
+
+  // Bước 2: Thử tất cả COM không phải Intel/Bluetooth
+  const unknownPorts = ports.filter(p =>
+    !p.manufacturer ||
+    !IGNORE_MANUFACTURER.some(m => p.manufacturer.toLowerCase().includes(m))
+  ).filter(p => p.path !== 'COM1' && p.path !== 'COM2'); // Bỏ COM1/COM2 system
+
+  if (unknownPorts.length > 0) {
+    console.log(`🔍 Thử cổng: ${unknownPorts.map(p => p.path).join(', ')}`);
+    return unknownPorts[0].path;
+  }
+
+  // Bước 3: Ưu tiên COM4 → COM7 → các cổng khác
+  console.warn(`⚠️ Không tìm thấy Arduino, thử lần lượt: ${PRIORITY_PORTS.join(', ')}`);
+  return PRIORITY_PORTS[0]; // Sẽ thử COM4 trước
 }
+
 
 
 // 🔥 Firebase config — lấy từ Firebase Console
@@ -125,8 +144,8 @@ function restoreStates() {
 function scheduleReconnect() {
   if (reconnecting) return;
   reconnecting = true;
-  console.log('🔄 Đang chờ kết nối lại Serial sau 3 giây...');
-  setTimeout(() => { reconnecting = false; connectSerial(); }, 3000);
+  console.log('🔄 Đang chờ kết nối lại Serial sau 6 giây...');
+  setTimeout(() => { reconnecting = false; connectSerial(); }, 6000);
 }
 
 async function connectSerial() {
