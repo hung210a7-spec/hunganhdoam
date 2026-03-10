@@ -18,9 +18,30 @@ const path = require('path');
 // =====================================================
 //  ⚙️ CẤU HÌNH — SỬA CÁC GIÁ TRỊ NÀY
 // =====================================================
-const SERIAL_PORT = 'COM7';
 const BAUD_RATE   = 9600;
 const WEB_PORT    = 3000;
+const FALLBACK_PORT = 'COM7'; // Dự phòng nếu không tự tìm được
+
+// Tự động tìm cổng COM của Arduino (CH340 chip = wch.cn)
+async function findArduinoPort() {
+  const { SerialPort } = require('serialport');
+  const ports = await SerialPort.list();
+  const arduino = ports.find(p =>
+    p.manufacturer && (
+      p.manufacturer.toLowerCase().includes('wch') ||
+      p.manufacturer.toLowerCase().includes('arduino') ||
+      p.manufacturer.toLowerCase().includes('ch340') ||
+      p.manufacturer.toLowerCase().includes('ch341')
+    )
+  );
+  if (arduino) {
+    console.log(`🔍 Tìm thấy Arduino tại: ${arduino.path} (${arduino.manufacturer})`);
+    return arduino.path;
+  }
+  console.warn(`⚠️ Không tự tìm thấy Arduino, dùng cổng mặc định: ${FALLBACK_PORT}`);
+  return FALLBACK_PORT;
+}
+
 
 // 🔥 Firebase config — lấy từ Firebase Console
 const firebaseConfig = {
@@ -80,14 +101,27 @@ function pushSensorData(data) {
   set(ref(db, 'sensor'), { ...data, updatedAt: Date.now() }).catch(console.error);
 }
 
-// ── Serial ──
 let port, parser, prevFan = null, prevPump = null;
+let reconnecting = false;
 
-function connectSerial() {
+function scheduleReconnect() {
+  if (reconnecting) return;
+  reconnecting = true;
+  console.log('🔄 Đang chờ kết nối lại Serial sau 3 giây...');
+  setTimeout(() => { reconnecting = false; connectSerial(); }, 3000);
+}
+
+async function connectSerial() {
+  // Đóng port cũ nếu còn
+  if (port && port.isOpen) { try { port.close(); } catch(_) {} }
+
+  const detectedPort = await findArduinoPort();
+
   try {
-    port = new SerialPort({ path: SERIAL_PORT, baudRate: BAUD_RATE });
+    port = new SerialPort({ path: detectedPort, baudRate: BAUD_RATE });
     parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-    port.on('open', () => console.log(`✅ Serial: ${SERIAL_PORT}`));
+    port.on('open', () => console.log(`✅ Serial: ${detectedPort} — Đã kết nối!`));
+
 
     parser.on('data', (line) => {
       line = line.trim();
@@ -107,15 +141,20 @@ function connectSerial() {
       } catch (_) {}
     });
 
+    port.on('close', () => {
+      console.warn('⚠️ Serial bị ngắt (rút USB?) — Đang chờ kết nối lại...');
+      scheduleReconnect();
+    });
     port.on('error', (err) => {
-      console.error('❌ Serial:', err.message);
-      setTimeout(connectSerial, 5000);
+      console.error('❌ Serial lỗi:', err.message);
+      scheduleReconnect();
     });
   } catch (err) {
     console.error('❌ Không mở được Serial:', err.message);
-    setTimeout(connectSerial, 5000);
+    scheduleReconnect();
   }
 }
+
 
 // ── API ──
 app.post('/api/control', (req, res) => {
@@ -164,7 +203,7 @@ wss.on('connection', (ws) => {
 
 server.listen(WEB_PORT, () => {
   console.log(`\n🚀 Dashboard: http://localhost:${WEB_PORT}`);
-  console.log(`📡 Serial: ${SERIAL_PORT}\n`);
+  console.log(`📡 Serial: Auto-detect Arduino\n`);
 });
 
 connectSerial();
