@@ -201,7 +201,8 @@
 
   // Gửi lệnh lên Firebase → Local server đọc và gửi vào Arduino
   window.sendCmd = function(cmd) {
-    set(ref(db, 'control'), { cmd, ts: Date.now() });
+    const ts = Date.now();
+    set(ref(db, 'control'), { cmd, ts, id: cmd + '_' + ts }); // ID duy nhất
     if (cmd !== 'AUTO') {
       document.getElementById('mode-text').textContent = '✋ THỦ CÔNG';
       document.getElementById('mode-text').style.color = '#f59e0b';

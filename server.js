@@ -185,14 +185,25 @@ app.post('/api/control', (req, res) => {
 });
 
 // Lắng nghe lệnh từ Firebase (từ public dashboard)
+let lastCmdId = null;
 onValue(ref(db, 'control'), (snapshot) => {
   const data = snapshot.val();
   if (!data || !data.cmd) return;
   if (!port || !port.isOpen) return;
-  // Chỉ xử lý lệnh mới (trong vòng 5 giây)
-  if (Date.now() - data.ts > 5000) return;
-  port.write(data.cmd + (data.cmd.includes('\n') ? '' : '\n'));
+
+  // Dùng ID lệnh để tránh thực thi trùng lặp
+  const cmdId = data.id || data.ts;
+  if (cmdId === lastCmdId) return;       // Lệnh cũ đã xử lý rồi
+  if (Date.now() - data.ts > 15000) return; // Bỏ qua lệnh cũ hơn 15 giây
+
+  lastCmdId = cmdId;
+  const cmdStr = data.cmd + (data.cmd.includes('\n') ? '' : '\n');
+  port.write(cmdStr, (err) => {
+    if (err) console.error('Ghi Serial lỗi:', err.message);
+    else console.log('📤 Lệnh từ web:', data.cmd.trim());
+  });
 });
+
 
 app.get('/api/log',  (req, res) => res.json(eventLog));
 app.get('/api/data', (req, res) => res.json(lastData));
