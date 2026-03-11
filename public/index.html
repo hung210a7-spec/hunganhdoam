@@ -158,10 +158,8 @@
     document.getElementById('hum-val').textContent  = d.h ?? '--';
     setDevice('fan',  d.fan,  d.fan  ? '🌡️ Đang hạ nhiệt' : '✅ Nhiệt độ lý tưởng');
     setDevice('pump', d.pump, d.pump ? '💧 Đang cải thiện độ ẩm' : '✅ Độ ẩm lý tưởng');
-    if (d.updatedAt) {
-      const t = new Date(d.updatedAt);
-      document.getElementById('updated-at').textContent = 'Cập nhật: ' + t.toLocaleTimeString('vi-VN');
-    }
+    const now = new Date();
+    document.getElementById('updated-at').textContent = 'Cập nhật: ' + now.toLocaleTimeString('vi-VN');
   });
 
   // Realtime event log
